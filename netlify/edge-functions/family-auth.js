@@ -2,9 +2,42 @@ const AUTH_COOKIE_NAME = 'mothers_day_access';
 const AUTH_COOKIE_TTL_SECONDS = 60 * 60 * 24 * 7;
 const LOGIN_PATH = '/__family-login';
 const ENCODER = new TextEncoder();
+const REQUIRED_ENV_KEYS = ['MOTHERS_DAY_PASSWORD', 'MOTHERS_DAY_AUTH_SECRET'];
+
+function getNetlifyEnv() {
+  if (typeof Netlify === 'undefined' || !Netlify.env || typeof Netlify.env.get !== 'function') {
+    return null;
+  }
+
+  return Netlify.env;
+}
 
 function getEnvValue(name) {
-  return globalThis.Netlify?.env?.get(name) || '';
+  const env = getNetlifyEnv();
+
+  return env?.get(name) || '';
+}
+
+function getMissingEnvKeys() {
+  const env = getNetlifyEnv();
+
+  if (!env) {
+    return REQUIRED_ENV_KEYS;
+  }
+
+  return REQUIRED_ENV_KEYS.filter((key) => !env.get(key));
+}
+
+function logMissingEnv({ context, missingKeys }) {
+  const siteName = context?.site?.name || 'unknown-site';
+  const deployId = context?.deploy?.id || 'unknown-deploy';
+  const region = context?.server?.region || 'unknown-region';
+
+  console.warn(
+    `[family-auth] Missing required Netlify Edge environment variable(s): ${missingKeys.join(
+      ', ',
+    )}. Set them with the Functions scope, then trigger a new deploy. site=${siteName} deploy=${deployId} region=${region}`,
+  );
 }
 
 function escapeHtml(value = '') {
@@ -23,10 +56,9 @@ function base64UrlEncode(bytes) {
 }
 
 async function createAccessToken() {
-  const password = getEnvValue('MOTHERS_DAY_PASSWORD');
-  const secret = getEnvValue('MOTHERS_DAY_AUTH_SECRET') || password;
+  const secret = getEnvValue('MOTHERS_DAY_AUTH_SECRET');
 
-  if (!password || !secret) {
+  if (!secret) {
     return '';
   }
 
@@ -237,9 +269,12 @@ function renderLoginPage({ request, error = '', isMissingConfig = false }) {
 
 export default async function familyAuth(request, context) {
   const password = getEnvValue('MOTHERS_DAY_PASSWORD');
+  const missingKeys = getMissingEnvKeys();
   const token = await createAccessToken();
 
-  if (!password || !token) {
+  if (missingKeys.length > 0 || !password || !token) {
+    logMissingEnv({ context, missingKeys: missingKeys.length > 0 ? missingKeys : REQUIRED_ENV_KEYS });
+
     return renderLoginPage({ request, isMissingConfig: true });
   }
 
@@ -254,11 +289,14 @@ export default async function familyAuth(request, context) {
     const submittedPassword = String(formData.get('password') || '');
 
     if (submittedPassword === password) {
-      const response = Response.redirect(new URL(getReturnPath(request), url.origin), 303);
-      response.headers.set('set-cookie', createCookie(token));
-      response.headers.set('cache-control', 'no-store');
-
-      return response;
+      return new Response(null, {
+        status: 303,
+        headers: {
+          location: new URL(getReturnPath(request), url.origin).toString(),
+          'set-cookie': createCookie(token),
+          'cache-control': 'no-store',
+        },
+      });
     }
 
     return renderLoginPage({
