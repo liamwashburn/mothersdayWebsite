@@ -3,19 +3,19 @@ const AUTH_COOKIE_TTL_SECONDS = 60 * 60 * 24 * 7;
 const LOGIN_PATH = '/__family-login';
 const ENCODER = new TextEncoder();
 const REQUIRED_ENV_KEYS = ['MOTHERS_DAY_PASSWORD', 'MOTHERS_DAY_AUTH_SECRET'];
+const TOKEN_MESSAGE = 'mothers-day-family-access-v1';
 
 function getNetlifyEnv() {
-  if (typeof Netlify === 'undefined' || !Netlify.env || typeof Netlify.env.get !== 'function') {
-    return null;
-  }
+  const env = globalThis.Netlify?.env;
 
-  return Netlify.env;
+  return env && typeof env.get === 'function' ? env : null;
 }
 
 function getEnvValue(name) {
   const env = getNetlifyEnv();
+  const value = env?.get(name);
 
-  return env?.get(name) || '';
+  return typeof value === 'string' ? value : '';
 }
 
 function getMissingEnvKeys() {
@@ -28,15 +28,35 @@ function getMissingEnvKeys() {
   return REQUIRED_ENV_KEYS.filter((key) => !env.get(key));
 }
 
+function getEnvDiagnostics(missingKeys) {
+  const env = getNetlifyEnv();
+
+  if (!env) {
+    return 'Netlify.env API is unavailable in this runtime invocation';
+  }
+
+  const keyStates = REQUIRED_ENV_KEYS.map((key) => {
+    const value = env.get(key);
+    const exists = typeof env.has === 'function' ? env.has(key) : typeof value === 'string';
+    const state = typeof value === 'string' && value.length > 0 ? 'present' : exists ? 'empty' : 'missing';
+
+    return `${key}:${state}`;
+  }).join(' ');
+
+  return `envKeyStates="${keyStates}" missing="${missingKeys.join(',') || 'none'}"`;
+}
+
 function logMissingEnv({ context, missingKeys }) {
   const siteName = context?.site?.name || 'unknown-site';
   const deployId = context?.deploy?.id || 'unknown-deploy';
+  const deployContext = context?.deploy?.context || 'unknown-context';
   const region = context?.server?.region || 'unknown-region';
+  const requestId = context?.requestId || 'unknown-request';
 
   console.warn(
     `[family-auth] Missing required Netlify Edge environment variable(s): ${missingKeys.join(
       ', ',
-    )}. Set them with the Functions scope, then trigger a new deploy. site=${siteName} deploy=${deployId} region=${region}`,
+    )}. Edge functions can only read variables whose scope includes Functions and whose deploy context matches this deploy. site=${siteName} deploy=${deployId} deployContext=${deployContext} region=${region} requestId=${requestId} ${getEnvDiagnostics(missingKeys)}`,
   );
 }
 
@@ -69,12 +89,18 @@ async function createAccessToken() {
     false,
     ['sign'],
   );
-  const signature = await crypto.subtle.sign('HMAC', key, ENCODER.encode('mothers-day-family-access-v1'));
+  const signature = await crypto.subtle.sign('HMAC', key, ENCODER.encode(TOKEN_MESSAGE));
 
   return base64UrlEncode(signature);
 }
 
-function getCookie(request, name) {
+function getCookie({ request, context }, name) {
+  const contextCookie = context?.cookies?.get?.(name);
+
+  if (typeof contextCookie === 'string') {
+    return contextCookie;
+  }
+
   const cookieHeader = request.headers.get('cookie') || '';
   const cookies = cookieHeader.split(';').map((cookie) => cookie.trim());
   const match = cookies.find((cookie) => cookie.startsWith(`${name}=`));
@@ -82,11 +108,15 @@ function getCookie(request, name) {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : '';
 }
 
+function isSafeReturnPath(value) {
+  return Boolean(value && value.startsWith('/') && !value.startsWith('//'));
+}
+
 function getReturnPath(request) {
   const url = new URL(request.url);
   const returnTo = url.searchParams.get('returnTo');
 
-  if (returnTo?.startsWith('/')) {
+  if (isSafeReturnPath(returnTo)) {
     return returnTo;
   }
 
@@ -278,7 +308,7 @@ export default async function familyAuth(request, context) {
     return renderLoginPage({ request, isMissingConfig: true });
   }
 
-  if (getCookie(request, AUTH_COOKIE_NAME) === token) {
+  if (getCookie({ request, context }, AUTH_COOKIE_NAME) === token) {
     return context.next();
   }
 
