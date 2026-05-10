@@ -6,38 +6,44 @@ const REQUIRED_ENV_KEYS = ['MOTHERS_DAY_PASSWORD', 'MOTHERS_DAY_AUTH_SECRET'];
 const TOKEN_MESSAGE = 'mothers-day-family-access-v1';
 
 function getNetlifyEnv() {
-  const env = globalThis.Netlify?.env;
+  if (
+    typeof Netlify === 'undefined' ||
+    !Netlify.env ||
+    typeof Netlify.env.get !== 'function' ||
+    typeof Netlify.env.has !== 'function'
+  ) {
+    return null;
+  }
 
-  return env && typeof env.get === 'function' ? env : null;
+  return Netlify.env;
 }
 
 function getEnvValue(name) {
-  const env = getNetlifyEnv();
-  const value = env?.get(name);
+  if (!getNetlifyEnv() || !Netlify.env.has(name)) {
+    return '';
+  }
+
+  const value = Netlify.env.get(name);
 
   return typeof value === 'string' ? value : '';
 }
 
 function getMissingEnvKeys() {
-  const env = getNetlifyEnv();
-
-  if (!env) {
+  if (!getNetlifyEnv()) {
     return REQUIRED_ENV_KEYS;
   }
 
-  return REQUIRED_ENV_KEYS.filter((key) => !env.get(key));
+  return REQUIRED_ENV_KEYS.filter((key) => !Netlify.env.has(key) || !Netlify.env.get(key));
 }
 
 function getEnvDiagnostics(missingKeys) {
-  const env = getNetlifyEnv();
-
-  if (!env) {
+  if (!getNetlifyEnv()) {
     return 'Netlify.env API is unavailable in this runtime invocation';
   }
 
   const keyStates = REQUIRED_ENV_KEYS.map((key) => {
-    const value = env.get(key);
-    const exists = typeof env.has === 'function' ? env.has(key) : typeof value === 'string';
+    const exists = Netlify.env.has(key);
+    const value = exists ? Netlify.env.get(key) : '';
     const state = typeof value === 'string' && value.length > 0 ? 'present' : exists ? 'empty' : 'missing';
 
     return `${key}:${state}`;
