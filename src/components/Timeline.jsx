@@ -1,15 +1,28 @@
 import { motion, useInView } from 'framer-motion';
-import { useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { memories } from '../data/siteContent.js';
 import { getFamilyPhotoMeta } from '../utils/galleryImages.js';
+import { getResponsiveImageProps } from '../utils/imageOptimization.js';
 import Reveal from './Reveal.jsx';
 import SectionLabel from './SectionLabel.jsx';
 
-function MemoryCard({ memory, index }) {
+const TIMELINE_IMAGE_WIDTHS = [480, 720, 960, 1280];
+const TIMELINE_IMAGE_SIZES =
+  '(max-width: 47.99rem) calc(100vw - 2rem), (max-width: 63.99rem) calc((100vw - 6rem) / 2), 30rem';
+
+const MemoryCard = memo(function MemoryCard({ memory, index }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, amount: 0.2 });
   const isLeft = index % 2 === 0;
   const imageMeta = getFamilyPhotoMeta(memory.image);
+  const imageProps = useMemo(
+    () =>
+      getResponsiveImageProps(memory.image, TIMELINE_IMAGE_WIDTHS, {
+        fallbackWidth: imageMeta.portrait ? 720 : 960,
+        sizes: TIMELINE_IMAGE_SIZES,
+      }),
+    [imageMeta.portrait, memory.image],
+  );
 
   return (
     <div ref={ref} className="timeline-item">
@@ -29,7 +42,15 @@ function MemoryCard({ memory, index }) {
           transition={{ duration: 0.9, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           <div className="timeline-card__image-wrap">
-            <img src={memory.image} alt={memory.title} loading="lazy" />
+            <img
+              {...imageProps}
+              alt={memory.title}
+              loading="lazy"
+              decoding="async"
+              fetchPriority="low"
+              width={imageMeta.width || undefined}
+              height={imageMeta.height || undefined}
+            />
             <div className="timeline-card__image-overlay" />
             <div className="timeline-card__year">{memory.year}</div>
           </div>
@@ -51,7 +72,7 @@ function MemoryCard({ memory, index }) {
       </div>
     </div>
   );
-}
+});
 
 export default function Timeline({ sectionRef }) {
   return (

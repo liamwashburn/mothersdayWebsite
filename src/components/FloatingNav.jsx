@@ -50,8 +50,8 @@ export default function FloatingNav() {
   return (
     <motion.nav
       className={`sticky-nav ${isOpen ? 'sticky-nav--open' : ''}`}
-      initial={{ opacity: 0, y: -16, filter: 'blur(8px)' }}
-      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      initial={{ opacity: 0, y: -16 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8, delay: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
       aria-label="Page sections"
     >

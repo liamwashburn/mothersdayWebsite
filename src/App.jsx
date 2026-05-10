@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { MotionConfig } from 'framer-motion';
 import AmbientBackground from './components/AmbientBackground.jsx';
 import FinalMessage from './components/FinalMessage.jsx';
 import FloatingNav from './components/FloatingNav.jsx';
@@ -11,14 +12,16 @@ export default function App() {
   const memoriesRef = useRef(null);
 
   return (
-    <main className="site-shell">
-      <AmbientBackground />
-      <FloatingNav />
-      <Hero memoriesRef={memoriesRef} />
-      <Timeline sectionRef={memoriesRef} />
-      <ThankYouMessages />
-      <Gallery />
-      <FinalMessage />
-    </main>
+    <MotionConfig reducedMotion="user">
+      <main className="site-shell">
+        <AmbientBackground />
+        <FloatingNav />
+        <Hero memoriesRef={memoriesRef} />
+        <Timeline sectionRef={memoriesRef} />
+        <ThankYouMessages />
+        <Gallery />
+        <FinalMessage />
+      </main>
+    </MotionConfig>
   );
 }

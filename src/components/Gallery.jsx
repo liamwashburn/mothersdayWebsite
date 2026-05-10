@@ -1,12 +1,25 @@
 import { motion, useInView } from 'framer-motion';
-import { useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { getGalleryImages } from '../utils/galleryImages.js';
+import { getResponsiveImageProps } from '../utils/imageOptimization.js';
 import Reveal from './Reveal.jsx';
 import SectionLabel from './SectionLabel.jsx';
 
-function GalleryItem({ image, index }) {
+const GALLERY_IMAGE_WIDTHS = [360, 520, 720, 960, 1280];
+const GALLERY_IMAGE_SIZES =
+  '(max-width: 47.99rem) calc(100vw - 2rem), (max-width: 63.99rem) calc((100vw - 4rem) / 2), 24rem';
+
+const GalleryItem = memo(function GalleryItem({ image, index }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, amount: 0.1 });
+  const imageProps = useMemo(
+    () =>
+      getResponsiveImageProps(image.src, GALLERY_IMAGE_WIDTHS, {
+        fallbackWidth: image.portrait ? 720 : 960,
+        sizes: GALLERY_IMAGE_SIZES,
+      }),
+    [image.portrait, image.src],
+  );
 
   return (
     <motion.figure
@@ -26,19 +39,21 @@ function GalleryItem({ image, index }) {
       }}
     >
       <img
-        src={image.src}
+        {...imageProps}
         alt={image.label || 'Family memory'}
         loading="lazy"
+        decoding="async"
+        fetchPriority="low"
         width={image.width || undefined}
         height={image.height || undefined}
       />
       <div className="gallery-item__ring" aria-hidden="true" />
     </motion.figure>
   );
-}
+});
 
 export default function Gallery() {
-  const galleryImages = getGalleryImages();
+  const galleryImages = useMemo(() => getGalleryImages(), []);
 
   return (
     <section id="gallery" className="content-section gallery-section">
