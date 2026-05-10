@@ -9,8 +9,7 @@ function getNetlifyEnv() {
   if (
     typeof Netlify === 'undefined' ||
     !Netlify.env ||
-    typeof Netlify.env.get !== 'function' ||
-    typeof Netlify.env.has !== 'function'
+    typeof Netlify.env.get !== 'function'
   ) {
     return null;
   }
@@ -19,7 +18,9 @@ function getNetlifyEnv() {
 }
 
 function getEnvValue(name) {
-  if (!getNetlifyEnv() || !Netlify.env.has(name)) {
+  const env = getNetlifyEnv();
+
+  if (!env) {
     return '';
   }
 
@@ -29,27 +30,32 @@ function getEnvValue(name) {
 }
 
 function getMissingEnvKeys() {
-  if (!getNetlifyEnv()) {
+  const env = getNetlifyEnv();
+
+  if (!env) {
     return REQUIRED_ENV_KEYS;
   }
 
-  return REQUIRED_ENV_KEYS.filter((key) => !Netlify.env.has(key) || !Netlify.env.get(key));
+  return REQUIRED_ENV_KEYS.filter((key) => !Netlify.env.get(key));
 }
 
 function getEnvDiagnostics(missingKeys) {
-  if (!getNetlifyEnv()) {
+  const env = getNetlifyEnv();
+
+  if (!env) {
     return 'Netlify.env API is unavailable in this runtime invocation';
   }
 
   const keyStates = REQUIRED_ENV_KEYS.map((key) => {
-    const exists = Netlify.env.has(key);
-    const value = exists ? Netlify.env.get(key) : '';
+    const value = Netlify.env.get(key);
+    const exists =
+      typeof Netlify.env.has === 'function' ? Netlify.env.has(key) : typeof value === 'string';
     const state = typeof value === 'string' && value.length > 0 ? 'present' : exists ? 'empty' : 'missing';
 
     return `${key}:${state}`;
   }).join(' ');
 
-  return `envKeyStates="${keyStates}" missing="${missingKeys.join(',') || 'none'}"`;
+  return `envApi="get:${typeof Netlify.env.get} has:${typeof Netlify.env.has} toObject:${typeof Netlify.env.toObject}" envKeyStates="${keyStates}" missing="${missingKeys.join(',') || 'none'}"`;
 }
 
 function logMissingEnv({ context, missingKeys }) {
